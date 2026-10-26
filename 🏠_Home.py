@@ -75,6 +75,17 @@ html, body, [data-testid="stAppViewContainer"] {
 .stat-num  { font-size: 2rem; font-weight: 800; color: #00D4FF; }
 .stat-label{ font-size: 0.78rem; color: #6666AA; text-transform: uppercase; letter-spacing: 0.08em; }
 
+/* ---- Map card ---- */
+.map-card {
+    background: linear-gradient(135deg, #0F1A2A, #12121A);
+    border: 1px solid #00D4FF33;
+    border-radius: 16px;
+    padding: 1.6rem 1.4rem;
+    transition: border-color 0.25s, box-shadow 0.25s;
+    height: 100%;
+}
+.map-card:hover { border-color: #00D4FF88; box-shadow: 0 0 24px #00D4FF22; }
+
 /* ---- Sidebar brand ---- */
 .sidebar-brand {
     font-size: 1.3rem;
@@ -101,10 +112,11 @@ with st.sidebar:
     st.markdown('<div class="sidebar-brand">⚡ RoadPulse AI</div>', unsafe_allow_html=True)
     st.markdown("---")
     st.markdown("**Navigate**")
-    st.page_link("🏠_Home.py",                   label="🏠  Home")
-    st.page_link("pages/1_📷_Image_Detection.py", label="📷  Image Detection")
-    st.page_link("pages/2_🎬_Video_Detection.py", label="🎬  Video Detection")
-    st.page_link("pages/3_📡_Realtime_Detection.py", label="📡  Realtime Detection")
+    st.page_link("🏠_Home.py",                        label="🏠  Home")
+    st.page_link("pages/1_📷_Image_Detection.py",     label="📷  Image Detection")
+    st.page_link("pages/2_🎬_Video_Detection.py",     label="🎬  Video Detection")
+    st.page_link("pages/3_📡_Realtime_Detection.py",  label="📡  Realtime Detection")
+    st.page_link("pages/4_🗺️_GPS_Damage_Map.py",      label="🗺️  GPS Damage Map")
     st.markdown("---")
     st.markdown('<div style="font-size:0.75rem;color:#444466;">Model: YOLOv8-Small · CRDDC2022</div>', unsafe_allow_html=True)
 
@@ -128,7 +140,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 
 # ── Feature cards ─────────────────────────────────────────────────────────────
 st.markdown("### ⚡ Detection Modes")
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 with col1:
     st.markdown("""
     <div class="card">
@@ -151,6 +163,14 @@ with col3:
         <div class="card-icon">📡</div>
         <div class="card-title">Realtime Detection</div>
         <div class="card-desc">Live webcam stream with real-time detection overlay. Great for field inspection use cases.</div>
+    </div>
+    """, unsafe_allow_html=True)
+with col4:
+    st.markdown("""
+    <div class="map-card">
+        <div class="card-icon">🗺️</div>
+        <div class="card-title">GPS Damage Map</div>
+        <div class="card-desc">Plot detected damage on an interactive OpenStreetMap with clickable markers, CSV export, and live GPS tracking.</div>
     </div>
     """, unsafe_allow_html=True)
 

@@ -1,4 +1,4 @@
-import sys
+﻿import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -27,6 +27,9 @@ html, body, [data-testid="stAppViewContainer"] { background-color: #0A0A0F; colo
 .glow-divider { border:none;height:1px;background:linear-gradient(90deg,transparent,#00D4FF44,transparent);margin:1.2rem 0; }
 .info-card { background:#12121A;border:1px solid #1E1E2E;border-radius:10px;padding:0.8rem 1.2rem;font-size:0.88rem;color:#8888AA; }
 .info-card b { color:#E8E8F0; }
+.stat-card { background:#12121A;border:1px solid #1E1E2E;border-radius:12px;padding:1rem 1.2rem;text-align:center; }
+.stat-num  { font-size:2rem;font-weight:800;color:#00D4FF; }
+.stat-label{ font-size:0.78rem;color:#6666AA;text-transform:uppercase;letter-spacing:0.08em; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -44,33 +47,31 @@ st.markdown('<div class="page-title">🎬 Video Detection</div>', unsafe_allow_h
 st.markdown('<div class="page-sub">Upload an MP4 video to run frame-by-frame road damage detection and download the annotated output.</div>', unsafe_allow_html=True)
 st.markdown('<hr class="glow-divider">', unsafe_allow_html=True)
 
-# ── Temp folder ────────────────────────────────────────────────────────────────
 TEMP_DIR = Path(__file__).parent.parent / "temp"
 TEMP_DIR.mkdir(exist_ok=True)
 TEMP_INPUT  = str(TEMP_DIR / "video_input.mp4")
 TEMP_OUTPUT = str(TEMP_DIR / "video_output.mp4")
 
-# ── State ──────────────────────────────────────────────────────────────────────
 if "video_running" not in st.session_state:
     st.session_state.video_running = False
+if "video_detections" not in st.session_state:
+    st.session_state.video_detections = []
 
-# ── Controls ───────────────────────────────────────────────────────────────────
 col_upload, col_conf = st.columns([3, 1])
 with col_upload:
     video_file = st.file_uploader("Upload Video (.mp4)", type=["mp4"], disabled=st.session_state.video_running)
 with col_conf:
     score_threshold = st.slider("Confidence", 0.05, 1.0, 0.25, 0.05, disabled=st.session_state.video_running)
 
-# ── Process ────────────────────────────────────────────────────────────────────
 if video_file is not None and not st.session_state.video_running:
     if st.button("▶️ Process Video", use_container_width=True, type="primary"):
         st.session_state.video_running = True
+        st.session_state.video_detections = []
         st.rerun()
 
 if video_file is not None and st.session_state.video_running:
     net = load_model()
 
-    # Write to disk
     with open(TEMP_INPUT, "wb") as f:
         f.write(video_file.getbuffer())
 
@@ -99,12 +100,14 @@ if video_file is not None and st.session_state.video_running:
         writer = cv2.VideoWriter(TEMP_OUTPUT, fourcc, fps, (W, H))
 
         frame_count = 0
+        collected_detections = []
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
                 break
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            _, annotated = run_detection(net, frame_rgb, score_threshold)
+            frame_dets, annotated = run_detection(net, frame_rgb, score_threshold)
+            collected_detections.extend(frame_dets)
             out_bgr = cv2.cvtColor(annotated, cv2.COLOR_RGB2BGR)
             writer.write(out_bgr)
 
@@ -119,6 +122,16 @@ if video_file is not None and st.session_state.video_running:
         writer.release()
         progress_bar.empty()
         frame_preview.empty()
+
+        # Deduplicate by class across entire video
+        seen = set()
+        unique_dets = []
+        for d in collected_detections:
+            k = (d.label, round(d.score, 1))
+            if k not in seen:
+                seen.add(k)
+                unique_dets.append(d)
+        st.session_state.video_detections = unique_dets
         st.session_state.video_running = False
 
         st.success("✅ Video processing complete!")
@@ -131,3 +144,27 @@ if video_file is not None and st.session_state.video_running:
         with btn_col2:
             if st.button("🔄 Process Another Video", use_container_width=True):
                 st.rerun()
+
+# ── GPS + Map section ──────────────────────────────────────────────────────────
+st.markdown('<hr class="glow-divider">', unsafe_allow_html=True)
+
+from utils.geo_map import render_geo_input, add_detection, render_map_section
+
+lat, lon = render_geo_input(key_suffix="vid")
+
+video_dets = st.session_state.get("video_detections", [])
+if video_dets:
+    if st.button("📍 Plot Video Detections on Map", type="primary", use_container_width=True, key="vid_plot_btn"):
+        added = 0
+        for d in video_dets:
+            if add_detection(lat, lon, d.label, d.score, source="video"):
+                added += 1
+        if added:
+            st.success(f"✅ {added} unique detection class(es) added to the map.")
+        elif lat == 0.0 and lon == 0.0:
+            st.warning("⚠️ Set a valid GPS location first.")
+        else:
+            st.info("ℹ️ All detections already on the map (deduplication).")
+
+st.markdown('<hr class="glow-divider">', unsafe_allow_html=True)
+render_map_section(lat, lon, map_key="vid_map")

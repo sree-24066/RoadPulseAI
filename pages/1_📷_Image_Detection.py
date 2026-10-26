@@ -18,7 +18,6 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── Shared CSS ─────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
 html, body, [data-testid="stAppViewContainer"] { background-color: #0A0A0F; color: #E8E8F0; }
@@ -33,10 +32,12 @@ html, body, [data-testid="stAppViewContainer"] { background-color: #0A0A0F; colo
 .det-table tr:hover td { background:#14142A; }
 .badge { display:inline-block;border-radius:6px;padding:2px 10px;font-size:0.78rem;font-weight:600; }
 .upload-hint { background:#12121A;border:1.5px dashed #1E1E2E;border-radius:12px;padding:1.2rem;color:#444466;text-align:center;font-size:0.88rem; }
+.stat-card { background:#12121A;border:1px solid #1E1E2E;border-radius:12px;padding:1rem 1.2rem;text-align:center; }
+.stat-num  { font-size:2rem;font-weight:800;color:#00D4FF; }
+.stat-label{ font-size:0.78rem;color:#6666AA;text-transform:uppercase;letter-spacing:0.08em; }
 </style>
 """, unsafe_allow_html=True)
 
-# ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown('<div class="sidebar-brand">⚡ RoadPulse AI</div>', unsafe_allow_html=True)
     st.markdown("---")
@@ -47,12 +48,10 @@ with st.sidebar:
     st.markdown("---")
     st.markdown('<div style="font-size:0.75rem;color:#444466;">Model: YOLOv8-Small · CRDDC2022</div>', unsafe_allow_html=True)
 
-# ── Page header ────────────────────────────────────────────────────────────────
 st.markdown('<div class="page-title">📷 Image Detection</div>', unsafe_allow_html=True)
 st.markdown('<div class="page-sub">Upload a road image to detect and classify damage zones instantly.</div>', unsafe_allow_html=True)
 st.markdown('<hr class="glow-divider">', unsafe_allow_html=True)
 
-# ── Controls ───────────────────────────────────────────────────────────────────
 col_ctrl1, col_ctrl2 = st.columns([3, 1])
 with col_ctrl1:
     image_file = st.file_uploader("Upload Image", type=["png", "jpg", "jpeg"], label_visibility="collapsed")
@@ -61,7 +60,7 @@ with col_ctrl1:
 with col_ctrl2:
     score_threshold = st.slider("Confidence", min_value=0.05, max_value=1.0, value=0.25, step=0.05, help="Lower = more detections, Higher = fewer but more confident")
 
-# ── Inference ──────────────────────────────────────────────────────────────────
+detections = []
 if image_file is not None:
     with st.spinner("🔍 Analyzing image…"):
         net = load_model()
@@ -71,7 +70,6 @@ if image_file is not None:
 
     st.markdown('<hr class="glow-divider">', unsafe_allow_html=True)
 
-    # ── Side-by-side results ───────────────────────────────────────────────────
     col1, col2 = st.columns(2, gap="medium")
     with col1:
         st.markdown("**🖼️ Original Image**")
@@ -79,8 +77,6 @@ if image_file is not None:
     with col2:
         st.markdown("**🎯 Predictions**")
         st.image(annotated, use_container_width=True)
-
-        # Download
         buffer = BytesIO()
         Image.fromarray(annotated).save(buffer, format="PNG")
         st.download_button(
@@ -93,7 +89,6 @@ if image_file is not None:
 
     st.markdown('<hr class="glow-divider">', unsafe_allow_html=True)
 
-    # ── Detection table ────────────────────────────────────────────────────────
     if detections:
         st.markdown(f"**🔎 {len(detections)} Detection(s) Found**")
         rows = ""
@@ -109,3 +104,36 @@ if image_file is not None:
         """, unsafe_allow_html=True)
     else:
         st.info("✅ No damage detected at this confidence level. Try lowering the threshold.")
+
+# ── GPS + Map section ──────────────────────────────────────────────────────────
+st.markdown('<hr class="glow-divider">', unsafe_allow_html=True)
+
+from utils.geo_map import render_geo_input, add_detection, render_map_section
+
+lat, lon = render_geo_input(key_suffix="img")
+
+if image_file is not None and detections:
+    # Auto-plot if GPS was just auto-detected this run
+    auto_plotted = False
+    if st.session_state.get("_geo_ok_img", False) and (lat != 0.0 or lon != 0.0):
+        added = sum(1 for d in detections if add_detection(lat, lon, d.label, d.score, source="image"))
+        if added:
+            st.success(f"✅ {added} detection(s) auto-plotted on the map at your GPS location.")
+            auto_plotted = True
+        st.session_state["_geo_ok_img"] = False  # reset so it doesn't loop
+
+    if not auto_plotted:
+        if st.button("📍 Plot Detections on Map", type="primary", use_container_width=True, key="img_plot_btn"):
+            added = 0
+            for d in detections:
+                if add_detection(lat, lon, d.label, d.score, source="image"):
+                    added += 1
+            if added:
+                st.success(f"✅ {added} new detection(s) added to the map.")
+            elif lat == 0.0 and lon == 0.0:
+                st.warning("⚠️ Set a valid GPS location first.")
+            else:
+                st.info("ℹ️ All detections at this location already exist on the map (deduplication).")
+
+st.markdown('<hr class="glow-divider">', unsafe_allow_html=True)
+render_map_section(lat, lon, map_key="img_map")

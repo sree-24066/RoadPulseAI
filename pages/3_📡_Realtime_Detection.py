@@ -1,4 +1,4 @@
-import sys
+﻿import sys
 import queue
 import logging
 from pathlib import Path
@@ -33,6 +33,9 @@ html, body, [data-testid="stAppViewContainer"] { background-color: #0A0A0F; colo
 .det-count { font-size:2.5rem;font-weight:800;color:#00D4FF;text-align:center; }
 .det-label { font-size:0.75rem;color:#6666AA;text-transform:uppercase;letter-spacing:0.1em;text-align:center; }
 .badge { display:inline-block;border-radius:6px;padding:2px 10px;font-size:0.78rem;font-weight:600; }
+.stat-card { background:#12121A;border:1px solid #1E1E2E;border-radius:12px;padding:1rem 1.2rem;text-align:center; }
+.stat-num  { font-size:2rem;font-weight:800;color:#00D4FF; }
+.stat-label{ font-size:0.78rem;color:#6666AA;text-transform:uppercase;letter-spacing:0.08em; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -122,3 +125,41 @@ with right_col:
     else:
         count_box.markdown('<div class="det-count">—</div><div class="det-label">Detections</div>', unsafe_allow_html=True)
         class_box.markdown('<div style="color:#444466;font-size:0.85rem;">Start the stream to see live results.</div>', unsafe_allow_html=True)
+
+# ── GPS + Map section ──────────────────────────────────────────────────────────
+st.markdown('<hr class="glow-divider">', unsafe_allow_html=True)
+st.markdown("""
+<div style="background:#12121A;border:1px solid #FFD93D33;border-radius:10px;padding:0.8rem 1.2rem;margin-bottom:0.8rem;">
+<b style="color:#FFD93D;">📡 Live GPS Tracking</b>
+<div style="font-size:0.8rem;color:#6666AA;margin-top:4px;">
+Enter your current location below. While the camera stream runs, click <b>📍 Log Current Frame</b>
+to record detected damage at your GPS position on the map. The map updates in real-time.
+</div></div>
+""", unsafe_allow_html=True)
+
+from utils.geo_map import render_geo_input, add_detection, render_map_section
+
+lat, lon = render_geo_input(key_suffix="rt")
+
+if webrtc_ctx.state.playing or not result_queue.empty():
+    if st.button("📍 Log Current Frame Detections to Map", type="primary", use_container_width=True, key="rt_log_btn"):
+        # Drain available detections
+        all_dets = []
+        while True:
+            try:
+                all_dets.extend(result_queue.get_nowait())
+            except queue.Empty:
+                break
+        added = 0
+        for d in all_dets:
+            if add_detection(lat, lon, d.label, d.score, source="realtime"):
+                added += 1
+        if added:
+            st.success(f"✅ {added} detection(s) logged to map at ({lat:.4f}, {lon:.4f}).")
+        elif lat == 0.0 and lon == 0.0:
+            st.warning("⚠️ Set a valid GPS location first.")
+        else:
+            st.info("ℹ️ No new detections or all already exist (deduplication).")
+
+st.markdown('<hr class="glow-divider">', unsafe_allow_html=True)
+render_map_section(lat, lon, map_key="rt_map")
